@@ -1,16 +1,15 @@
 # 🚀 Remote Nvim
 
+
+> [!WARNING]
+> I have not had the energy/bandwidth to maintain this which I think has been obvious from the unmaintained nature of this repo.
+> I don't see myself being able to dedicate time to this repo anytime soon. So, it's better if I go ahead and archive this repo to indicate so.
+> Feel free to copy code or create a fork if you found this useful. Thanks!
+
 Adds support for [remote development](https://code.visualstudio.com/docs/remote/remote-overview)
 and [devcontainers](https://code.visualstudio.com/docs/devcontainers/containers)
 to Neovim (just like VSCode). Read in the [FAQ](#faq) at the end of this document why you would prefer
 using remote-nvim instead of SSH into remote + local neovim.
-
-> [!WARNING]
-> This plugin has not yet reached maturity. So, breaking changes are expected. Any such change would be
-> communicated through [this GitHub discussion](https://github.com/amitds1997/remote-nvim.nvim/discussions/78).
->
-> The author appreciates if you can drop by and suggest any changes you would like to see in the plugin
-> to improve it further.
 
 ## ✨ Features
 
