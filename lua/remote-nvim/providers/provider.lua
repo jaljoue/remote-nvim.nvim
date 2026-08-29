@@ -58,9 +58,11 @@
 ---@field private _remote_neovim_utils_script_path  string Get Neovim utils script path on the remote host
 ---@field private _remote_server_process_id  integer? Process ID of the remote server job
 ---@field protected _remote_working_dir string? Working directory on the remote server
+---@field protected _provisioner remote-nvim.providers.Provisioner Provisioner that sets up the remote host
 local Provider = require("remote-nvim.middleclass")("Provider")
 
 local Executor = require("remote-nvim.providers.executor")
+local Provisioner = require("remote-nvim.providers.provisioner")
 local provider_utils = require("remote-nvim.providers.utils")
 ---@type remote-nvim.RemoteNeovim
 local remote_nvim = require("remote-nvim")
@@ -113,6 +115,7 @@ function Provider:init(opts)
   self.provider_type = "local"
   self.local_executor = Executor()
   self.executor = self.local_executor
+  self._provisioner = Provisioner({ provider = self })
   self.progress_viewer = opts.progress_view
   self._cleanup_run_number = 1
   self._neovim_launch_number = 1
@@ -556,146 +559,7 @@ function Provider:_setup_remote()
   if not self._setup_running then
     self._setup_running = true
 
-    -- Create necessary directories
-    local necessary_dirs = {
-      self._remote_scripts_path,
-      utils.path_join(self._remote_is_windows, self._remote_xdg_config_path, remote_nvim.config.remote.app_name),
-      utils.path_join(self._remote_is_windows, self._remote_xdg_cache_path, remote_nvim.config.remote.app_name),
-      utils.path_join(self._remote_is_windows, self._remote_xdg_state_path, remote_nvim.config.remote.app_name),
-      utils.path_join(self._remote_is_windows, self._remote_xdg_data_path, remote_nvim.config.remote.app_name),
-      self:_remote_neovim_binary_dir(),
-    }
-    local mkdirs_cmds = {}
-    for _, dir in ipairs(necessary_dirs) do
-      table.insert(mkdirs_cmds, ("mkdir -p %s"):format(dir))
-    end
-    self:run_command(table.concat(mkdirs_cmds, " && "), "Creating custom neovim directories on remote")
-
-    -- Copy things required on remote
-    self:upload(
-      vim.fn.fnamemodify(remote_nvim.default_opts.neovim_install_script_path, ":h"),
-      self._remote_neovim_home,
-      "Copying plugin scripts onto remote"
-    )
-
-    ---If we have custom scripts specified, copy them over
-    if remote_nvim.default_opts.neovim_install_script_path ~= remote_nvim.config.neovim_install_script_path then
-      self:upload(
-        remote_nvim.config.neovim_install_script_path,
-        self._remote_scripts_path,
-        "Copying custom install scripts specified by user"
-      )
-    end
-
-    local default_script_dir = vim.fn.fnamemodify(remote_nvim.default_opts.neovim_install_script_path, ":h:p")
-    if not default_script_dir:match("/$") then
-      default_script_dir = default_script_dir .. "/"
-    end
-    -- We list all paths in our scripts since we want to `chmod +x` all of them
-    local all_scripts = vim.fs.find(function(name, _)
-      return name:match("%.sh$")
-    end, {
-      limit = math.huge,
-      type = "file",
-      path = default_script_dir,
-    })
-    local paths_to_chmod = {}
-    for _, path in ipairs(all_scripts) do
-      local filepath = vim.fn.fnamemodify(path, ":p")
-      local relative_path = filepath:gsub("^" .. vim.pesc(default_script_dir), "")
-      local remote_script_path = utils.path_join(utils.is_windows, self._remote_scripts_path, relative_path)
-      table.insert(paths_to_chmod, remote_script_path)
-    end
-
-    local install_cmd_lst = {}
-    for _, script_path in ipairs(paths_to_chmod) do
-      table.insert(install_cmd_lst, "chmod +x " .. script_path)
-    end
-
-    local install_cmd = ("bash %s -v %s -d %s -m %s -a %s"):format(
-      self._remote_neovim_install_script_path,
-      self._remote_neovim_version,
-      self._remote_neovim_home,
-      self._remote_neovim_install_method,
-      self._remote_arch
-    )
-    table.insert(install_cmd_lst, install_cmd)
-
-    -- Set correct permissions and install Neovim
-    local install_neovim_cmd = table.concat(install_cmd_lst, " && ")
-
-    if self.offline_mode and self._remote_neovim_install_method ~= "system" then
-      -- We need to ensure that we download Neovim version locally and then push it to the remote
-      if not remote_nvim.config.offline_mode.no_github then
-        self:run_command(
-          ("bash %s -o %s -v %s -a %s -t %s -d %s"):format(
-            utils.path_join(utils.is_windows, utils.get_plugin_root(), "scripts", "neovim_download.sh"),
-            self._remote_os,
-            self._remote_neovim_version,
-            self._remote_arch,
-            self._remote_neovim_install_method,
-            remote_nvim.config.offline_mode.cache_dir
-          ),
-          "Downloading Neovim release locally",
-          nil,
-          nil,
-          true
-        )
-      end
-
-      local local_release_path = utils.path_join(
-        utils.is_windows,
-        remote_nvim.config.offline_mode.cache_dir,
-        provider_utils.get_offline_neovim_release_name(
-          self._remote_os,
-          self._remote_neovim_version,
-          self._remote_arch,
-          self._remote_neovim_install_method
-        )
-      )
-      local local_upload_paths = { local_release_path }
-
-      if self._remote_neovim_install_method == "binary" then
-        table.insert(local_upload_paths, ("%s.sha256sum"):format(local_release_path))
-      end
-      self:upload(
-        local_upload_paths,
-        utils.path_join(self._remote_is_windows, self:_remote_neovim_binary_dir()),
-        "Upload Neovim release from local to remote"
-      )
-
-      install_neovim_cmd = install_neovim_cmd .. " -o"
-    end
-
-    self:run_command(install_neovim_cmd, "Installing Neovim (if required)")
-
-    -- Upload user neovim config, if necessary
-    if self:_get_neovim_config_upload_preference() then
-      self:upload(
-        self._local_path_to_remote_neovim_config,
-        self._remote_neovim_config_path,
-        "Copying your Neovim configuration files onto remote",
-        remote_nvim.config.remote.copy_dirs.config.compression
-      )
-    end
-
-    -- If user has specified certain directories to copy over in the "state", "cache" or "data" directories, do it now
-    for key, local_paths in pairs(self._local_path_copy_dirs) do
-      if not vim.tbl_isempty(local_paths) then
-        local remote_upload_path = utils.path_join(
-          self._remote_is_windows,
-          self["_remote_xdg_" .. key .. "_path"],
-          remote_nvim.config.remote.app_name
-        )
-
-        self:upload(
-          local_paths,
-          remote_upload_path,
-          ("Copying over Neovim '%s' directories onto remote"):format(key),
-          remote_nvim.config.remote.copy_dirs[key].compression
-        )
-      end
-    end
+    self._provisioner:provision()
 
     self._setup_running = false
   else

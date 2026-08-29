@@ -586,6 +586,11 @@ describe("Provider", function()
 
     describe("and runs correct commands", function()
       local run_command_stub, upload_stub, offline_mode_config
+      local chmod_scripts_cmd = "chmod +x ~/.remote-nvim/scripts/neovim_download.sh"
+        .. " && chmod +x ~/.remote-nvim/scripts/neovim_install.sh"
+        .. " && chmod +x ~/.remote-nvim/scripts/utils/api.sh"
+        .. " && chmod +x ~/.remote-nvim/scripts/utils/core.sh"
+        .. " && chmod +x ~/.remote-nvim/scripts/utils/neovim.sh"
 
       before_each(function()
         run_command_stub = stub(provider, "run_command")
@@ -633,11 +638,16 @@ describe("Provider", function()
             match.is_string()
           )
 
+        -- make plugin scripts executable
+        assert
+          .stub(run_command_stub).was
+          .called_with(match.is_ref(provider), chmod_scripts_cmd, "Setting up plugin scripts on remote")
+
         -- install neovim if needed
         assert.stub(run_command_stub).was.called_with(
           match.is_ref(provider),
-          "chmod +x ~/.remote-nvim/scripts/neovim_download.sh && chmod +x ~/.remote-nvim/scripts/neovim_install.sh && chmod +x ~/.remote-nvim/scripts/utils/api.sh && chmod +x ~/.remote-nvim/scripts/utils/core.sh && chmod +x ~/.remote-nvim/scripts/utils/neovim.sh && bash ~/.remote-nvim/scripts/neovim_install.sh -v stable -d ~/.remote-nvim -m binary -a x86_64",
-          match.is_string()
+          "bash ~/.remote-nvim/scripts/neovim_install.sh -v stable -d ~/.remote-nvim -m binary -a x86_64",
+          "Installing Neovim (if required)"
         )
 
         assert.stub(upload_stub).was.called_with(
@@ -693,10 +703,14 @@ describe("Provider", function()
           release_checksum_path,
         }, "~/.remote-nvim/nvim-downloads/stable", match.is_string())
 
+        assert
+          .stub(run_command_stub).was
+          .called_with(match.is_ref(provider), chmod_scripts_cmd, "Setting up plugin scripts on remote")
+
         assert.stub(run_command_stub).was.called_with(
           match.is_ref(provider),
-          "chmod +x ~/.remote-nvim/scripts/neovim_download.sh && chmod +x ~/.remote-nvim/scripts/neovim_install.sh && chmod +x ~/.remote-nvim/scripts/utils/api.sh && chmod +x ~/.remote-nvim/scripts/utils/core.sh && chmod +x ~/.remote-nvim/scripts/utils/neovim.sh && bash ~/.remote-nvim/scripts/neovim_install.sh -v stable -d ~/.remote-nvim -m binary -a x86_64 -o",
-          match.is_string()
+          "bash ~/.remote-nvim/scripts/neovim_install.sh -v stable -d ~/.remote-nvim -m binary -a x86_64 -o",
+          "Installing Neovim (if required)"
         )
       end)
 
@@ -717,10 +731,14 @@ describe("Provider", function()
           true
         )
 
+        assert
+          .stub(run_command_stub).was
+          .called_with(match.is_ref(provider), chmod_scripts_cmd, "Setting up plugin scripts on remote")
+
         assert.stub(run_command_stub).was.called_with(
           match.is_ref(provider),
-          "chmod +x ~/.remote-nvim/scripts/neovim_download.sh && chmod +x ~/.remote-nvim/scripts/neovim_install.sh && chmod +x ~/.remote-nvim/scripts/utils/api.sh && chmod +x ~/.remote-nvim/scripts/utils/core.sh && chmod +x ~/.remote-nvim/scripts/utils/neovim.sh && bash ~/.remote-nvim/scripts/neovim_install.sh -v stable -d ~/.remote-nvim -m binary -a x86_64 -o",
-          match.is_string()
+          "bash ~/.remote-nvim/scripts/neovim_install.sh -v stable -d ~/.remote-nvim -m binary -a x86_64 -o",
+          "Installing Neovim (if required)"
         )
       end)
 
